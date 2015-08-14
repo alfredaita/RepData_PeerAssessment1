@@ -1,0 +1,210 @@
+---
+title: "Reproducible research Peer Assessment 1"
+author: "Alfred Aita"
+date: "August 12, 2015"
+output: html_document
+---
+```{r,echo=F}
+library(data.table)
+```
+
+First we will unzip and load the into a dataframe. And examine it
+
+```{r,echo=TRUE}
+Atbl<-read.csv(unzip("activity.zip"),colClasses = c("numeric","Date","numeric"))
+Atbl$date<-as.Date(Atbl$date,format = "%Y-%m-%d")
+#Atbl$interval<-as.factor(Atbl$interval)
+str(Atbl)
+head(Atbl,3)
+tail(Atbl,3)
+```
+
+We now calculate the total number of steps taken,removing Na's
+
+```{r,echo=TRUE}
+
+total.steps<-sum(Atbl$steps,na.rm = TRUE)
+total.steps
+```
+
+Calculate total steps per day.
+```{r }
+##x2<-aggregate(Atbl$steps,by=list((substr(Atbl$date,1,61))),sum, na.rm = T)
+x2<-aggregate(steps~date,Atbl,sum)
+names(x2)<-c("Date",'daily.steps' )
+head(x2)
+str(x2)
+```
+plot a histogram  of steps by each day
+
+
+```{r,echo=TRUE}
+
+
+hist(x2$daily.steps,col = "yellow",breaks=25,main = "Steps taken per day",
+   xlab = "Number of Steps per day",ylab = "frequency per day")  
+```
+
+
+Calculate the median and the mean for steps taken each day
+```{r,echo=TRUE}
+x3<-aggregate(Atbl$steps,by=list((substr(Atbl$date,1,61))),mean)
+meansteps <-round(mean(x2$daily.steps,na.rm = T))
+
+mediansteps <-median(x2$daily.steps,na.rm = T)
+names(x3)<-c("Dates","mean.steps.")
+
+x4<-aggregate(Atbl$steps,by=list((substr(Atbl$date,1,61))),median)
+
+```
+The Mean steps per day is
+```{r,echo= F}
+meansteps
+```
+The Median steps per day is 
+```{r,echo= F}
+mediansteps
+```
+
+## Average daily avtivity pattern
+```{r ,echo=T}
+x3a<-aggregate(Atbl$steps,by = list(interval=Atbl$interval),mean,na.rm=T)
+colnames(x3a)<-c("interval","avg_steps")
+#plot(x3a,type="l")
+#using ggplot2 to avoid side effects from above
+library(ggplot2)
+ggplot(x3a, aes(x=as.numeric(interval), y=avg_steps)) +  geom_line(color="orange",size =1)+labs(title="Avg daily activity pattern") +
+   theme_bw()
+
+```
+
+find the interval with the most steps
+
+```{r ,echo =T}
+maxInterval<-x3a[which.max(x3a$avg_steps),]
+
+```
+The interval with the most steps is
+```{r echo = T}
+maxInterval$interval
+```
+
+The count of steps for that interval is
+```{r echo =T}
+maxInterval$avg_steps
+
+```
+## Impute missing values
+
+1. Caculate total missing values from original data set
+ ```{r, echo =T}
+ missing_vals<-sum(is.na(Atbl$steps))
+ 
+ ```
+ 
+ Total number of missing values is `r missing_vals`. 
+ 
+##Filling missing values
+we will use the mean value accross the days at the same interval
+
+```{r,echo=t}
+Atbl_f<-Atbl
+L <- dim(Atbl_f[1])
+ for(i in 1:L) {
+   if(is.na(Atbl_f$steps[i])){
+     ival<-Atbl_f$interval[i]
+     imp<-x3a[x3a$interval==ival,"avg_steps"]
+     Atbl_f$steps[i]<-imp}}
+  str(Atbl_f)
+  
+```
+
+Missing values in new data set
+```{r, echo=T}
+sum(is.na(Atbl_f$steps))
+```
+Zero output tells us there are no missing values
+
+# Histogram of steps taken per day all values filled.
+```{r ,echo =T}
+Filled_Steps_Day  <-aggregate(steps~date,Atbl_f,sum)
+names(Filled_Steps_Day)<-c("Date",'daily.steps' )
+
+str(Filled_Steps_Day)
+head(x2,2)
+head(Filled_Steps_Day,2)
+```
+```{r,echo=TRUE}
+hist(Filled_Steps_Day$daily.steps,col = "yellow",breaks= 25,main = "Steps taken per day filled",
+   xlab = "Number of Steps per day",ylab = "frequency per day")
+```   
+Mean steps per day filled
+```{r,echo= T}
+NewMean<-mean(Filled_Steps_Day$daily.steps,na.rm = T)
+NewMean
+```
+Median steps filled per day
+```{r, echo= T }
+NewMedian <-median(Filled_Steps_Day$daily.steps,na.rm= T)
+NewMedian
+```
+The Difference between the values of the mean and median are small
+
+  *Before filling e missing values
+  
+   1. Mean: `r meansteps`
+   
+   2. Median: `r mediansteps`
+   
+  *After filling missing values
+  
+   1. Mean: 
+```{r,echo =T}
+NewMean
+```
+   
+   2. Median: 
+```{r,echo = T} 
+NewMedian
+```  
+
+#are there differences in activity patterns weekends vs. weekdays
+
+we are using the data with filled in missing values
+
+
+```{r,echo=T}
+weekdays_steps<-function(data){
+ weekdays_steps<- aggregate(data$steps,by=list(interval=data$interval),
+                FUN= mean,na.rm=T)
+   
+
+          colnames(weekdays_steps) <- c("interval","steps")
+            weekdays_steps
+}
+ data_by_weekdays <- function(data) {
+   data$weekday <-as.factor(weekdays(data$date))
+   weekend_data<-subset(data,weekday %in% c("Saturday","Sunday"))
+   weekday_data<-subset(data,!weekday %in% c("Saturday","Sunday"))
+    
+   weekend_steps <- weekdays_steps(weekend_data)
+   weekday_steps <- weekdays_steps(weekday_data)
+   
+   weekend_steps$dayofweek <- rep("weekend",nrow(weekend_steps))
+   weekday_steps$dayofweek <- rep("weekday",nrow(weekday_steps))
+   
+   data_by_weekdays<- rbind(weekend_steps,weekday_steps)
+   data_by_weekdays$dayofweek <- as.factor(data_by_weekdays$dayofweek)
+   data_by_weekdays
+ }
+ data_weekdays <- data_by_weekdays(Atbl_f)
+```
+
+```{r,echo=T}
+ ggplot(data_weekdays,aes(x=interval,y=steps))+
+          geom_line(color="red") +
+          facet_wrap(~dayofweek,nrow = 2,ncol = 1)+
+          labs(x="interval",y="number of steps")+
+          theme_bw()
+```
+        
